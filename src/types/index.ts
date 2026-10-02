@@ -2,6 +2,10 @@ export type Competition = {
   id: string
   name: string
   registration_deadline: string
+  registration_closed: boolean
+  registration_closed_at?: string | null
+  status: 'registration' | 'active' | 'finished'
+  auto_create_rounds: boolean
   is_active: boolean
 }
 
@@ -19,5 +23,7 @@ export type Round = {
   pick_deadline: string
   results_deadline: string
   counts_for_ko: boolean
-  status: 'open' | 'picks_closed' | 'results_pending' | 'completed'
+  status: 'locked' | 'open' | 'published' | 'completed'
+  published_at?: string | null
+  closed_at?: string | null
 }

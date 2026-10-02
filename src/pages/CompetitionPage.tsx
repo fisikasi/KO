@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Competition, Round, Team } from '../types'
 
@@ -10,6 +10,9 @@ type Standing = {
   username: string
   streak: number
   is_alive: boolean
+  is_champion: boolean
+  player_status: 'alive' | 'eliminated' | 'champion'
+  used_team_count: number
 }
 
 type RoundResult = {
@@ -44,7 +47,13 @@ type AppNotification = {
   user_id: string
   competition_id: string
   round_id?: string | null
-  type: 'survived' | 'eliminated' | 'no_pick'
+  type:
+    | 'survived'
+    | 'eliminated'
+    | 'no_pick'
+    | 'champion'
+    | 'champion_announcement'
+    | 'info'
   message: string
   is_read: boolean
   created_at: string
@@ -63,7 +72,12 @@ export default function CompetitionPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [savedTeamId, setSavedTeamId] = useState<string | null>(null)
   const [usedTeamIds, setUsedTeamIds] = useState<string[]>([])
+
+  // Erabiltzaileak talde bat eskuz sakatu badu, Supabaseko
+  // hasierako kargak ez du hautaketa hori ezabatuko.
+  const pickInteractionRef = useRef(false)
   const [currentUserAlive, setCurrentUserAlive] = useState(true)
+  const [currentUserChampion, setCurrentUserChampion] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -99,6 +113,8 @@ export default function CompetitionPage() {
 
   const [resultsMessage, setResultsMessage] = useState('')
   const [closingRound, setClosingRound] = useState(false)
+  const [coordinatorAction, setCoordinatorAction] =
+    useState<'publish' | 'registration' | 'restart' | null>(null)
 
   // --------------------------------------------------
   // DATU NAGUSIAK KARGATU
@@ -276,6 +292,12 @@ export default function CompetitionPage() {
         ? currentStanding.is_alive
         : true,
     )
+
+    setCurrentUserChampion(
+      currentStanding
+        ? currentStanding.is_champion
+        : false,
+    )
   }
 
   useEffect(() => {
@@ -291,19 +313,28 @@ export default function CompetitionPage() {
       rounds.find(
         round =>
           round.counts_for_ko &&
-          round.status !== 'completed',
-      ) ??
-      rounds
-        .filter(round => round.counts_for_ko)
-        .at(-1),
+          (
+            round.status === 'open' ||
+            round.status === 'published'
+          ),
+      ) ?? null,
     [rounds],
   )
 
   const pickDeadlinePassed = useMemo(() => {
     if (!activeRound?.pick_deadline) return false
 
-    return new Date() >= new Date(activeRound.pick_deadline)
+    return (
+      activeRound.status !== 'open' ||
+      new Date() >= new Date(activeRound.pick_deadline)
+    )
   }, [activeRound])
+
+  useEffect(() => {
+    pickInteractionRef.current = false
+    setSelectedTeamId(null)
+    setSavedTeamId(null)
+  }, [activeRound?.id])
 
   // --------------------------------------------------
   // ERABILTZAILEAREN AUKERAKETAK
@@ -343,8 +374,13 @@ export default function CompetitionPage() {
         setSelectedTeamId(currentPick.team_id)
         setSavedTeamId(currentPick.team_id)
       } else {
-        setSelectedTeamId(null)
         setSavedTeamId(null)
+
+        // Karga asinkronoa erabiltzailea klik egin ondoren
+        // bukatzen bada, ez dugu bere hautaketa ezabatzen.
+        if (!pickInteractionRef.current) {
+          setSelectedTeamId(null)
+        }
       }
 
       const previousRoundIds = rounds
@@ -403,19 +439,29 @@ export default function CompetitionPage() {
     }
 
     const deadline = new Date(activeRound.pick_deadline)
+    const isPublic =
+      activeRound.status === 'published' ||
+      activeRound.status === 'completed' ||
+      new Date() >= deadline
 
-    if (new Date() >= deadline) {
+    if (isPublic) {
       loadPublicPicks(activeRound.id)
     } else {
       setPublicPicks([])
     }
 
+    if (
+      activeRound.status !== 'open' ||
+      new Date() >= deadline
+    ) {
+      return
+    }
+
     const millisecondsUntilDeadline =
       deadline.getTime() - Date.now()
 
-    if (millisecondsUntilDeadline <= 0) return
-
     const timeoutId = window.setTimeout(() => {
+      loadBaseData()
       loadPublicPicks(activeRound.id)
     }, millisecondsUntilDeadline + 250)
 
@@ -494,6 +540,17 @@ export default function CompetitionPage() {
   useEffect(() => {
     if (rounds.length === 0) return
 
+    const currentRound = [...rounds]
+      .filter(
+        round =>
+          round.status === 'open' ||
+          round.status === 'published',
+      )
+      .sort(
+        (a, b) =>
+          b.round_number - a.round_number,
+      )[0]
+
     const latestCompletedRound = [...rounds]
       .filter(round => round.status === 'completed')
       .sort(
@@ -501,14 +558,9 @@ export default function CompetitionPage() {
           b.round_number - a.round_number,
       )[0]
 
-    const latestRound = [...rounds].sort(
-      (a, b) =>
-        b.round_number - a.round_number,
-    )[0]
-
     setSelectedResultsRoundId(
-      latestCompletedRound?.id ??
-        latestRound?.id ??
+      currentRound?.id ??
+        latestCompletedRound?.id ??
         null,
     )
   }, [rounds])
@@ -553,6 +605,13 @@ export default function CompetitionPage() {
       !activeRound ||
       !selectedTeamId
     ) {
+      return
+    }
+
+    if (currentUserChampion) {
+      setMessage(
+        'Txapelduna zara eta ez duzu beste talderik aukeratu behar.',
+      )
       return
     }
 
@@ -614,6 +673,7 @@ export default function CompetitionPage() {
     }
 
     setSavedTeamId(selectedTeamId)
+    pickInteractionRef.current = false
     setMessage('Aukeraketa gordeta.')
     setSaving(false)
   }
@@ -676,6 +736,130 @@ export default function CompetitionPage() {
   }
 
   // --------------------------------------------------
+  // KOORDINATZAILEAREN EKINTZAK
+  // --------------------------------------------------
+
+  async function publishRoundPicks() {
+    if (!selectedResultsRoundId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    setCoordinatorAction('publish')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'publish_round_picks',
+      {
+        p_round_id: selectedResultsRoundId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(`Errorea: ${error.message}`)
+      setCoordinatorAction(null)
+      return
+    }
+
+    await loadBaseData()
+    await loadPublicPicks(selectedResultsRoundId)
+
+    setResultsMessage(
+      'Aukeraketa itxita eta argitaratuta.',
+    )
+    setCoordinatorAction(null)
+  }
+
+  async function closeRegistration() {
+    if (!competitionId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Izen-ematea itxi nahi duzu? Une horretatik aurrera ezin izango da parte-hartzaile berririk sartu.',
+    )
+
+    if (!confirmed) return
+
+    setCoordinatorAction('registration')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'close_competition_registration',
+      {
+        p_competition_id: competitionId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(`Errorea: ${error.message}`)
+      setCoordinatorAction(null)
+      return
+    }
+
+    await loadBaseData()
+    setResultsMessage('Izen-ematea itxita.')
+    setCoordinatorAction(null)
+  }
+
+  async function restartCompetition() {
+    if (!competitionId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Txapelketa berriro hasi nahi duzu? Aukeraketak, emaitzak, jakinarazpenak eta txapeldunak berrabiaraziko dira. Parte-hartzaileak eta taldeak mantenduko dira.',
+    )
+
+    if (!confirmed) return
+
+    setCoordinatorAction('restart')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'restart_competition',
+      {
+        p_competition_id: competitionId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(`Errorea: ${error.message}`)
+      setCoordinatorAction(null)
+      return
+    }
+
+    setSelectedStanding(null)
+    setUserHistory([])
+    setNotification(null)
+
+    await loadBaseData()
+    await loadStandings()
+    await loadCurrentUserStatus()
+    await loadLatestNotification()
+
+    setResultsMessage('Txapelketa berriro hasita.')
+    setCoordinatorAction(null)
+  }
+
+  // --------------------------------------------------
   // JARDUNALDIA ITXI
   // --------------------------------------------------
 
@@ -723,7 +907,7 @@ export default function CompetitionPage() {
     }
 
     const confirmed = window.confirm(
-      `${selectedRound.round_number}. jardunaldia itxi nahi duzu?\n\nJardunaldia ixtean sailkapena eguneratuko da.`,
+      `${selectedRound.round_number}. jardunaldia itxi eta hurrengoa ireki nahi duzu?\n\nSailkapena, kanporaketak eta jakinarazpenak eguneratuko dira.`,
     )
 
     if (!confirmed) return
@@ -768,7 +952,7 @@ export default function CompetitionPage() {
     await loadLatestNotification()
 
     setResultsMessage(
-      `${selectedRound.round_number}. jardunaldia itxita. Sailkapena eguneratu da.`,
+      `${selectedRound.round_number}. jardunaldia itxita. Hurrengo jardunaldia, badago, irekita geratu da.`,
     )
 
     setClosingRound(false)
@@ -892,13 +1076,19 @@ export default function CompetitionPage() {
   const aliveCount =
     standings.filter(
       standing =>
-        standing.is_alive,
+        standing.player_status === 'alive',
+    ).length
+
+  const championCount =
+    standings.filter(
+      standing =>
+        standing.player_status === 'champion',
     ).length
 
   const eliminatedCount =
     standings.filter(
       standing =>
-        !standing.is_alive,
+        standing.player_status === 'eliminated',
     ).length
 
   const selectedResultsRound =
@@ -927,6 +1117,13 @@ export default function CompetitionPage() {
     <main className="page-shell">
       <header className="page-header">
         <div>
+          <Link
+            to="/lehiaketak"
+            className="back-link"
+          >
+            ← LEHIAKETAK
+          </Link>
+
           <p className="eyebrow">
             LEHIAKETA
           </p>
@@ -935,6 +1132,12 @@ export default function CompetitionPage() {
             {competition?.name ??
               'Bigarren Nazionala Gizonezkoak'}
           </h1>
+
+          {competition?.status === 'finished' && (
+            <p className="competition-finished">
+              🏁 TXAPELKETA AMAITUTA
+            </p>
+          )}
         </div>
       </header>
 
@@ -1014,6 +1217,15 @@ export default function CompetitionPage() {
 
                   {notification.type === 'no_pick' &&
                     '💀 KANPORATUTA'}
+
+                  {notification.type === 'champion' &&
+                    '🏆 TXAPELDUNA ZARA'}
+
+                  {notification.type === 'champion_announcement' &&
+                    '🏆 TXAPELDUNA'}
+
+                  {notification.type === 'info' &&
+                    'ℹ️ INFORMAZIOA'}
                 </h2>
 
                 <p>
@@ -1066,18 +1278,36 @@ export default function CompetitionPage() {
 
             <span
               className={
-                currentUserAlive
-                  ? 'alive-chip'
-                  : 'alive-chip eliminated-chip'
+                currentUserChampion
+                  ? 'alive-chip champion-chip'
+                  : currentUserAlive
+                    ? 'alive-chip'
+                    : 'alive-chip eliminated-chip'
               }
             >
-              {currentUserAlive
-                ? '🔥 BIZIRIK'
-                : '💀 KANPORATUTA'}
+              {currentUserChampion
+                ? '🏆 TXAPELDUNA'
+                : currentUserAlive
+                  ? '🔥 BIZIRIK'
+                  : '💀 KANPORATUTA'}
             </span>
           </section>
 
-          {!currentUserAlive && (
+          {currentUserChampion && (
+            <div className="champion-message">
+              <strong>
+                🏆 Txapelduna zara!
+              </strong>
+
+              <p>
+                Txapelketa bizirik amaitu duzu. Zure historikoa eta
+                gainerako parte-hartzaileen bilakaera ikusten jarrai
+                dezakezu.
+              </p>
+            </div>
+          )}
+
+          {!currentUserAlive && !currentUserChampion && (
             <div className="eliminated-message">
               <strong>
                 💀 KO-tik kanpo geratu zara.
@@ -1128,7 +1358,8 @@ export default function CompetitionPage() {
                 const isDisabled =
                   isUsed ||
                   pickDeadlinePassed ||
-                  !currentUserAlive
+                  !currentUserAlive ||
+                  currentUserChampion
 
                 return (
                   <button
@@ -1146,7 +1377,8 @@ export default function CompetitionPage() {
                       pickDeadlinePassed
                         ? 'locked'
                         : '',
-                      !currentUserAlive
+                      (!currentUserAlive ||
+                        currentUserChampion)
                         ? 'eliminated-team'
                         : '',
                     ]
@@ -1158,6 +1390,8 @@ export default function CompetitionPage() {
                       ) {
                         return
                       }
+
+                      pickInteractionRef.current = true
 
                       setSelectedTeamId(
                         team.id,
@@ -1205,7 +1439,8 @@ export default function CompetitionPage() {
             {selectedTeamId &&
               activeRound &&
               !pickDeadlinePassed &&
-              currentUserAlive && (
+              currentUserAlive &&
+              !currentUserChampion && (
                 <div className="pick-actions">
                   <button
                     type="button"
@@ -1246,7 +1481,8 @@ export default function CompetitionPage() {
               <div className="empty-state">
                 Oraindik ez dago jardunaldi aktiborik.
               </div>
-            ) : activeRound.pick_deadline &&
+            ) : activeRound.status === 'open' &&
+              activeRound.pick_deadline &&
               new Date() < new Date(activeRound.pick_deadline) ? (
               <div className="public-picks-locked">
                 <strong>
@@ -1356,6 +1592,16 @@ export default function CompetitionPage() {
 
                 <div>
                   <strong>
+                    {championCount}
+                  </strong>
+
+                  <span>
+                    🏆 TXAPELDUNAK
+                  </span>
+                </div>
+
+                <div>
+                  <strong>
                     {eliminatedCount}
                   </strong>
 
@@ -1372,9 +1618,11 @@ export default function CompetitionPage() {
                       key={standing.user_id}
                       type="button"
                       className={`standing-row standing-button ${
-                        standing.is_alive
-                          ? ''
-                          : 'eliminated'
+                        standing.player_status === 'champion'
+                          ? 'champion'
+                          : standing.player_status === 'eliminated'
+                            ? 'eliminated'
+                            : ''
                       }`}
                       onClick={() =>
                         loadUserHistory(standing)
@@ -1391,9 +1639,11 @@ export default function CompetitionPage() {
                       </span>
 
                       <span>
-                        {standing.is_alive
-                          ? '🔥 BIZIRIK'
-                          : '💀 KANPORATUTA'}
+                        {standing.player_status === 'champion'
+                          ? '🏆 TXAPELDUNA'
+                          : standing.player_status === 'alive'
+                            ? '🔥 BIZIRIK'
+                            : '💀 KANPORATUTA'}
                       </span>
                     </button>
                   ),
@@ -1547,6 +1797,18 @@ export default function CompetitionPage() {
                 </strong>
               </p>
 
+              {selectedResultsRound.status === 'locked' && (
+                <p>🔒 Jardunaldia oraindik ez dago irekita.</p>
+              )}
+
+              {selectedResultsRound.status === 'open' && (
+                <p>🟢 Aukeraketa irekita.</p>
+              )}
+
+              {selectedResultsRound.status === 'published' && (
+                <p>👁 Aukeraketa itxita eta argitaratuta.</p>
+              )}
+
               {selectedResultsRound.status ===
                 'completed' ? (
                 <p>
@@ -1596,6 +1858,46 @@ export default function CompetitionPage() {
                     }
                   />
                 </label>
+
+                <div className="coordinator-actions">
+                  {!competition?.registration_closed &&
+                    competition?.status !== 'finished' && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={coordinatorAction !== null}
+                      onClick={closeRegistration}
+                    >
+                      {coordinatorAction === 'registration'
+                        ? 'IXTEN...'
+                        : 'ITXI IZEN-EMATEAK'}
+                    </button>
+                  )}
+
+                  {selectedResultsRound?.status === 'open' && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={coordinatorAction !== null}
+                      onClick={publishRoundPicks}
+                    >
+                      {coordinatorAction === 'publish'
+                        ? 'ARGITARATZEN...'
+                        : 'AUKERAKETA ITXI ETA ARGITARATU'}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="danger-button"
+                    disabled={coordinatorAction !== null}
+                    onClick={restartCompetition}
+                  >
+                    {coordinatorAction === 'restart'
+                      ? 'BERRABIARAZTEN...'
+                      : 'TXAPELKETA BERRIRO HASI'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1653,8 +1955,8 @@ export default function CompetitionPage() {
                   </div>
 
                   {coordinatorMode &&
-                    selectedResultsRound?.status !==
-                      'completed' && (
+                    selectedResultsRound?.status ===
+                      'published' && (
                       <div className="result-actions">
                         <button
                           type="button"
@@ -1727,8 +2029,8 @@ export default function CompetitionPage() {
 
           {coordinatorMode &&
             selectedResultsRound &&
-            selectedResultsRound.status !==
-              'completed' && (
+            selectedResultsRound.status ===
+              'published' && (
               <div className="close-round-area">
                 <button
                   type="button"
@@ -1744,7 +2046,7 @@ export default function CompetitionPage() {
                 >
                   {closingRound
                     ? 'IXTEN...'
-                    : 'JARDUNALDIA ITXI'}
+                    : 'JARDUNALDIA ITXI ETA HURRENGOA IREKI'}
                 </button>
 
                 {pendingResultsCount >

@@ -691,3 +691,175 @@ input:focus { outline: 3px solid rgba(0,0,0,.12); border-color: #111; }
   border-color: #ead39a;
   border-left: 5px solid #b98a28;
 }
+
+
+/* =========================================================
+   KO 2026-10-02: izen-ematea, txapeldunak eta koordinazioa
+   ========================================================= */
+
+.competition-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.joined-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: .76rem;
+  font-weight: 900;
+  background: #f2f8f3;
+  border: 1px solid #b8d7bf;
+}
+
+.competition-registration-state {
+  margin-top: 14px;
+  font-weight: 800;
+}
+
+.competition-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.competition-enter-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 24px;
+  border-radius: 14px;
+  background: #111;
+  color: white;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.competition-page-message {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #deded7;
+  border-radius: 12px;
+  background: white;
+}
+
+.competition-finished {
+  display: inline-flex;
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fff8e8;
+  border: 1px solid #ead39a;
+  font-size: .8rem;
+  font-weight: 900;
+}
+
+.champion-chip {
+  background: #fff8e8;
+  border: 1px solid #ead39a;
+}
+
+.champion-message {
+  margin: 18px 0 26px;
+  padding: 18px 20px;
+  border: 1px solid #ead39a;
+  border-left: 5px solid #b98a28;
+  border-radius: 14px;
+  background: #fff8e8;
+}
+
+.champion-message strong {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.champion-message p {
+  margin: 0;
+  color: #666;
+  line-height: 1.45;
+}
+
+.standings-summary {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.standing-row.champion {
+  background: #fff8e8;
+  border-color: #ead39a;
+}
+
+.notification-champion,
+.notification-champion_announcement {
+  background: #fff8e8;
+  border-color: #ead39a;
+  border-left: 5px solid #b98a28;
+}
+
+.notification-info {
+  background: #f4f6f8;
+  border-color: #d8dde3;
+  border-left: 5px solid #7a8694;
+}
+
+.coordinator-box {
+  max-width: none;
+  width: min(100%, 760px);
+}
+
+.coordinator-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.danger-button {
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid #d4a4a4;
+  background: #fbf2f2;
+  color: #7f1d1d;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:disabled,
+.secondary-button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+@media (max-width: 700px) {
+  .standings-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .competition-card-actions,
+  .coordinator-actions {
+    flex-direction: column;
+  }
+
+  .competition-card-actions > *,
+  .coordinator-actions > * {
+    width: 100%;
+  }
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: #555;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.back-link:hover {
+  color: #111;
+}
