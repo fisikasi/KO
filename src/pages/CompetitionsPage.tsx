@@ -19,6 +19,7 @@ export default function CompetitionsPage() {
   const [loading, setLoading] = useState(true)
   const [joiningId, setJoiningId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [showInfo, setShowInfo] = useState(false)
 
   async function loadCompetitions() {
     setLoading(true)
@@ -158,23 +159,23 @@ export default function CompetitionsPage() {
                 <div className="competition-card-actions">
                   {!competition.is_joined &&
                     competition.registration_open && (
-                    <button
-                      type="button"
-                      className="primary-button"
-                      disabled={
-                        joiningId === competition.id
-                      }
-                      onClick={() =>
-                        joinCompetition(
-                          competition.id,
-                        )
-                      }
-                    >
-                      {joiningId === competition.id
-                        ? 'IZENA EMATEN...'
-                        : 'PARTE HARTU'}
-                    </button>
-                  )}
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={
+                          joiningId === competition.id
+                        }
+                        onClick={() =>
+                          joinCompetition(
+                            competition.id,
+                          )
+                        }
+                      >
+                        {joiningId === competition.id
+                          ? 'IZENA EMATEN...'
+                          : 'PARTE HARTU'}
+                      </button>
+                    )}
 
                   {competition.is_joined && (
                     <Link
@@ -184,11 +185,165 @@ export default function CompetitionsPage() {
                       SARTU
                     </Link>
                   )}
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowInfo(true)}
+                  >
+                    + INFO
+                  </button>
                 </div>
               </article>
             ))
           )}
         </section>
+      )}
+
+      {showInfo && (
+        <div
+          className="info-modal-backdrop"
+          onClick={() => setShowInfo(false)}
+        >
+          <div
+            className="info-modal"
+            onClick={event => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="info-modal-close"
+              onClick={() => setShowInfo(false)}
+              aria-label="Itxi"
+            >
+              ×
+            </button>
+
+            <p className="eyebrow">
+              KO JOKOA
+            </p>
+
+            <h2>
+              Nola jokatzen da?
+            </h2>
+
+            <div className="info-rules">
+              <section>
+                <h3>🎯 HELBURUA</h3>
+                <p>
+                  Aukeratu talde bat jardunaldi bakoitzean
+                  eta saiatu bizirik jarraitzen.
+                </p>
+              </section>
+
+              <section>
+                <h3>🏀 NOLA JOKATZEN DA?</h3>
+
+                <ul>
+                  <li>
+                    Jardunaldi bakoitzean talde bakarra
+                    aukeratu behar duzu.
+                  </li>
+
+                  <li>
+                    Aukeratutako taldeak irabazten badu,
+                    bizirik jarraitzen duzu.
+                  </li>
+
+                  <li>
+                    Galtzen badu, KO-tik kanpo geratzen zara.
+                  </li>
+
+                  <li>
+                    Talderik aukeratzen ez baduzu,
+                    kanporatuta geratzen zara.
+                  </li>
+
+                  <li>
+                    Behin erabilitako talde bat ezin duzu
+                    berriro aukeratu jolasa bukatu arte.
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h3>⏰ EPEAK</h3>
+
+                <ul>
+                  <li>
+                    Taldearen aukeraketa ostiralean 21:30etan ixten da.
+                  </li>
+
+                  <li>
+                    Une horretatik aurrera parte-hartzaile
+                    guztien aukeraketak ikusgai egongo dira.
+                  </li>
+
+                  <li>
+                    Jardunaldia astelehenean 23:00etan ixten da.
+                  </li>
+
+                  <li>
+                    Ligako jardunaldirik ez badago,
+                    koordinatzaileak KO jardunaldia
+                    atzeratu dezake.
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h3>🏆 NOLA IRABAZTEN DA?</h3>
+
+                <ul>
+                  <li>
+                    Bizirik geratzen den azken jokalaria bazara,
+                    txapelduna zara.
+                  </li>
+
+                  <li>
+                    Aukeran zeundetTalde guztiak 
+                    erabili badituzu eta
+                    bizirik jarraitzen baduzu,
+                    txapelduna zara.
+                  </li>
+
+                  <li>
+                    Txapeldun bat baino gehiago egon daiteke.
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h3>🔥 BOLADA</h3>
+
+                <p>
+                  Zure boladak jarraian gainditutako
+                  jardunaldi kopurua erakusten du.
+                </p>
+              </section>
+
+              <section>
+                <h3>ℹ️ GARRANTZITSUA</h3>
+
+                <p>
+                  Koordinatzaileak, beharrezkoa bada,
+                  aukeraketa lehenago itxi,
+                  jardunaldia amaitu edo jardunaldia
+                  atzeratu dezake.
+                </p>
+              </section>
+            </div>
+
+            <div className="info-modal-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setShowInfo(false)}
+              >
+                ITXI
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )

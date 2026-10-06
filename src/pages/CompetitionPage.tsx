@@ -114,7 +114,15 @@ export default function CompetitionPage() {
   const [resultsMessage, setResultsMessage] = useState('')
   const [closingRound, setClosingRound] = useState(false)
   const [coordinatorAction, setCoordinatorAction] =
-    useState<'publish' | 'registration' | 'restart' | null>(null)
+    useState<
+      'publish' |
+      'registration' |
+      'openRegistration' |
+      'restart' |
+      'postpone' |
+      'removeUser' |
+      null
+    >(null)
 
   // --------------------------------------------------
   // DATU NAGUSIAK KARGATU
@@ -248,6 +256,12 @@ export default function CompetitionPage() {
 
   useEffect(() => {
     loadLatestNotification()
+
+    const interval = window.setInterval(() => {
+      loadLatestNotification()
+    }, 30000)
+
+    return () => window.clearInterval(interval)
   }, [competitionId])
 
   // --------------------------------------------------
@@ -813,6 +827,152 @@ export default function CompetitionPage() {
     setCoordinatorAction(null)
   }
 
+  async function openRegistration() {
+    if (!competitionId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Izen-emateak berriro ireki nahi dituzu?',
+    )
+
+    if (!confirmed) return
+
+    setCoordinatorAction('openRegistration')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'open_competition_registration',
+      {
+        p_competition_id: competitionId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(
+        `Errorea: ${error.message}`,
+      )
+      setCoordinatorAction(null)
+      return
+    }
+
+    await loadBaseData()
+
+    setResultsMessage(
+      'Izen-emateak berriro irekita.',
+    )
+
+    setCoordinatorAction(null)
+  }
+
+  async function postponeRound() {
+    if (!selectedResultsRoundId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    const selectedRound = rounds.find(
+      round =>
+        round.id === selectedResultsRoundId,
+    )
+
+    if (!selectedRound) return
+
+    const confirmed = window.confirm(
+      `${selectedRound.round_number}. jardunaldia astebete atzeratu nahi duzu?`,
+    )
+
+    if (!confirmed) return
+
+    setCoordinatorAction('postpone')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'postpone_ko_round',
+      {
+        p_round_id: selectedResultsRoundId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(
+        `Errorea: ${error.message}`,
+      )
+      setCoordinatorAction(null)
+      return
+    }
+
+    await loadBaseData()
+
+    const { data: updatedRound } =
+      await supabase
+        .from('rounds')
+        .select(
+          'pick_deadline, results_deadline',
+        )
+        .eq(
+          'id',
+          selectedResultsRoundId,
+        )
+        .single()
+
+    if (updatedRound) {
+      const pickDate =
+        new Intl.DateTimeFormat(
+          'eu-ES',
+          {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Europe/Madrid',
+          },
+        ).format(
+          new Date(
+            updatedRound.pick_deadline,
+          ),
+        )
+
+      const resultsDate =
+        new Intl.DateTimeFormat(
+          'eu-ES',
+          {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Europe/Madrid',
+          },
+        ).format(
+          new Date(
+            updatedRound.results_deadline,
+          ),
+        )
+
+      setResultsMessage(
+        `📅 Jardunaldia atzeratuta. Aukeraketa: ${pickDate}. Jardunaldiaren itxiera: ${resultsDate}.`,
+      )
+    } else {
+      setResultsMessage(
+        '📅 Jardunaldia astebete atzeratu da.',
+      )
+    }
+
+    setCoordinatorAction(null)
+  }
   async function restartCompetition() {
     if (!competitionId) return
 
@@ -856,6 +1016,55 @@ export default function CompetitionPage() {
     await loadLatestNotification()
 
     setResultsMessage('Txapelketa berriro hasita.')
+    setCoordinatorAction(null)
+  }
+
+  async function removeParticipant(
+    userId: string,
+    username: string,
+  ) {
+    if (!competitionId) return
+
+    if (!coordinatorPassword.trim()) {
+      setResultsMessage(
+        'Koordinatzailearen pasahitza sartu behar duzu.',
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      `${username} lehiaketatik kendu nahi duzu?\n\nBere aukeraketak eta lehiaketa honetako datuak ezabatuko dira.`,
+    )
+
+    if (!confirmed) return
+
+    setCoordinatorAction('removeUser')
+    setResultsMessage('')
+
+    const { error } = await supabase.rpc(
+      'remove_competition_participant',
+      {
+        p_competition_id: competitionId,
+        p_user_id: userId,
+        p_password: coordinatorPassword,
+      },
+    )
+
+    if (error) {
+      setResultsMessage(
+        `Errorea: ${error.message}`,
+      )
+      setCoordinatorAction(null)
+      return
+    }
+
+    await loadStandings()
+    await loadBaseData()
+
+    setResultsMessage(
+      `${username} lehiaketatik kendu da.`,
+    )
+
     setCoordinatorAction(null)
   }
 
@@ -962,109 +1171,8 @@ export default function CompetitionPage() {
   // DATA EUSKARAZ
   // --------------------------------------------------
 
-  function formatDeadline(
-    dateString?: string,
-  ) {
-    if (!dateString) return ''
+  
 
-    const date = new Date(dateString)
-
-    const weekdays = [
-      'igandea',
-      'astelehena',
-      'asteartea',
-      'asteazkena',
-      'osteguna',
-      'ostirala',
-      'larunbata',
-    ]
-
-    const months = [
-      'urtarrilaren',
-      'otsailaren',
-      'martxoaren',
-      'apirilaren',
-      'maiatzaren',
-      'ekainaren',
-      'uztailaren',
-      'abuztuaren',
-      'irailaren',
-      'urriaren',
-      'azaroaren',
-      'abenduaren',
-    ]
-
-    const weekday =
-      weekdays[date.getDay()]
-
-    const month =
-      months[date.getMonth()]
-
-    const day =
-      date.getDate()
-
-    const hour = String(
-      date.getHours(),
-    ).padStart(2, '0')
-
-    const minute = String(
-      date.getMinutes(),
-    ).padStart(2, '0')
-
-    return `${weekday}, ${month} ${day}a, ${hour}:${minute}`
-  }
-
-  function formatShortDeadline(
-    dateString?: string,
-  ) {
-    if (!dateString) return ''
-
-    const date = new Date(dateString)
-
-    const weekdays = [
-      'igandea',
-      'astelehena',
-      'asteartea',
-      'asteazkena',
-      'osteguna',
-      'ostirala',
-      'larunbata',
-    ]
-
-    const months = [
-      'urt.',
-      'ots.',
-      'mar.',
-      'api.',
-      'mai.',
-      'eka.',
-      'uzt.',
-      'abu.',
-      'ira.',
-      'urr.',
-      'aza.',
-      'abe.',
-    ]
-
-    const weekday =
-      weekdays[date.getDay()]
-
-    const month =
-      months[date.getMonth()]
-
-    const day =
-      date.getDate()
-
-    const hour = String(
-      date.getHours(),
-    ).padStart(2, '0')
-
-    const minute = String(
-      date.getMinutes(),
-    ).padStart(2, '0')
-
-    return `${weekday}, ${month} ${day} · ${hour}:${minute}`
-  }
 
   // --------------------------------------------------
   // LABURPENAK
@@ -1257,17 +1365,48 @@ export default function CompetitionPage() {
                   ? `${activeRound.round_number}. jardunaldia`
                   : 'Oraindik jardunaldirik ez'}
               </h2>
+              {activeRound?.postponed_at && (
+                <div className="warning">
+                  <strong>📅 JARDUNALDIA ATZERATUTA</strong>
 
-              {activeRound?.pick_deadline && (
-                <p className="muted">
-                  Aukeratzeko azken eguna:{' '}
-                  <strong>
-                    {formatDeadline(
-                      activeRound.pick_deadline,
-                    )}
-                  </strong>
-                </p>
+                  <p>
+                    Aukeraketa:{' '}
+                    <strong>
+                      {new Intl.DateTimeFormat('eu-ES', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Madrid',
+                      }).format(
+                        new Date(activeRound.pick_deadline),
+                      )}
+                    </strong>
+                  </p>
+
+                  <p>
+                    Jardunaldiaren itxiera:{' '}
+                    <strong>
+                      {new Intl.DateTimeFormat('eu-ES', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Madrid',
+                      }).format(
+                        new Date(activeRound.results_deadline),
+                      )}
+                    </strong>
+                  </p>
+                </div>
               )}
+
+              <p className="muted">
+                Aukeratzeko azken ordua:{' '}
+                <strong>Ostiralean 21:30etan</strong>
+              </p>
 
               {pickDeadlinePassed && (
                 <p className="warning">
@@ -1491,11 +1630,7 @@ export default function CompetitionPage() {
 
                 <p>
                   Ikusgai:{' '}
-                  <strong>
-                    {formatShortDeadline(
-                      activeRound.pick_deadline,
-                    )}
-                  </strong>
+                  <strong>Ostiralean 21:30etan</strong>
                 </p>
               </div>
             ) : loadingPublicPicks ? (
@@ -1565,6 +1700,36 @@ export default function CompetitionPage() {
             </div>
           </div>
 
+          <div className="results-toolbar">
+            {!coordinatorMode ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setCoordinatorMode(true)
+                }
+              >
+                🔐 KOORDINATZAILE MODUA
+              </button>
+            ) : (
+              <div className="coordinator-box">
+                <label>
+                  Koordinatzailearen pasahitza
+
+                  <input
+                    type="password"
+                    value={coordinatorPassword}
+                    onChange={event =>
+                      setCoordinatorPassword(
+                        event.target.value,
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+
           {loadingStandings ? (
             <p>Kargatzen...</p>
           ) : (
@@ -1614,9 +1779,8 @@ export default function CompetitionPage() {
               <div className="standings-list">
                 {standings.map(
                   (standing, index) => (
-                    <button
+                    <div
                       key={standing.user_id}
-                      type="button"
                       className={`standing-row standing-button ${
                         standing.player_status === 'champion'
                           ? 'champion'
@@ -1645,7 +1809,25 @@ export default function CompetitionPage() {
                             ? '🔥 BIZIRIK'
                             : '💀 KANPORATUTA'}
                       </span>
-                    </button>
+                      {coordinatorMode && (
+                        <button
+                          type="button"
+                          className="remove-user-button"
+                          title={`${standing.username} lehiaketatik kendu`}
+                          aria-label={`${standing.username} lehiaketatik kendu`}
+                          onClick={event => {
+                            event.stopPropagation()
+
+                            removeParticipant(
+                              standing.user_id,
+                              standing.username,
+                            )
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   ),
                 )}
               </div>
@@ -1789,12 +1971,8 @@ export default function CompetitionPage() {
           {selectedResultsRound && (
             <div className="results-info">
               <p className="muted">
-                Emaitzak aldatzeko azken eguna:{' '}
-                <strong>
-                  {formatDeadline(
-                    selectedResultsRound.results_deadline,
-                  )}
-                </strong>
+                Jardunaldia ixteko azken ordua:{' '}
+                <strong>Astelehena 23:00etan</strong>
               </p>
 
               {selectedResultsRound.status === 'locked' && (
@@ -1860,19 +2038,33 @@ export default function CompetitionPage() {
                 </label>
 
                 <div className="coordinator-actions">
-                  {!competition?.registration_closed &&
-                    competition?.status !== 'finished' && (
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={coordinatorAction !== null}
-                      onClick={closeRegistration}
-                    >
-                      {coordinatorAction === 'registration'
-                        ? 'IXTEN...'
-                        : 'ITXI IZEN-EMATEAK'}
-                    </button>
-                  )}
+                  {competition?.status !== 'finished' && (
+                  <>
+                    {!competition?.registration_closed ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={coordinatorAction !== null}
+                        onClick={closeRegistration}
+                      >
+                        {coordinatorAction === 'registration'
+                          ? 'IXTEN...'
+                          : 'ITXI IZEN-EMATEAK'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={coordinatorAction !== null}
+                        onClick={openRegistration}
+                      >
+                        {coordinatorAction === 'openRegistration'
+                          ? 'IREKITZEN...'
+                          : 'IREKI IZEN-EMATEAK'}
+                      </button>
+                    )}
+                  </>
+                )}
 
                   {selectedResultsRound?.status === 'open' && (
                     <button
@@ -1884,6 +2076,19 @@ export default function CompetitionPage() {
                       {coordinatorAction === 'publish'
                         ? 'ARGITARATZEN...'
                         : 'AUKERAKETA ITXI ETA ARGITARATU'}
+                    </button>
+                  )}
+
+                  {selectedResultsRound?.status === 'open' && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={coordinatorAction !== null}
+                      onClick={postponeRound}
+                    >
+                      {coordinatorAction === 'postpone'
+                        ? 'ATZERATZEN...'
+                        : '📅 ASTEBETE ATZERATU'}
                     </button>
                   )}
 

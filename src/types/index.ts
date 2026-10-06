@@ -26,4 +26,5 @@ export type Round = {
   status: 'locked' | 'open' | 'published' | 'completed'
   published_at?: string | null
   closed_at?: string | null
+  postponed_at?: string | null
 }

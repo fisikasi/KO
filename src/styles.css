@@ -863,3 +863,106 @@ input:focus { outline: 3px solid rgba(0,0,0,.12); border-color: #111; }
 .back-link:hover {
   color: #111;
 }
+
+.remove-user-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d9a3a3;
+  border-radius: 50%;
+  background: transparent;
+  color: #a33;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.remove-user-button:hover {
+  background: #fff1f1;
+}
+
+.info-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.info-modal {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #fff9db;
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+
+.info-modal {
+  border: 1px solid #f0df9a;
+}
+
+.info-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: #f4f4f2;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.info-rules {
+  display: grid;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.info-rules section {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e8e8e3;
+}
+
+.info-rules section:last-child {
+  border-bottom: 0;
+}
+
+.info-rules h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.info-rules p,
+.info-rules li {
+  line-height: 1.55;
+}
+
+.info-rules ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.info-modal-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.login-logo {
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 18px;
+}
